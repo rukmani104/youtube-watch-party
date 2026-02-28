@@ -3,11 +3,9 @@ const express = require("express");
 const http = require("http");
 const { Server } = require("socket.io");
 const cors = require("cors");
-const path = require("path");
 
 const app = express();
 app.use(cors());
-
 
 const server = http.createServer(app);
 
@@ -20,11 +18,8 @@ let rooms = {}; // In-memory rooms
 io.on("connection", (socket) => {
   console.log("New client connected:", socket.id);
 
-  // ===============================
   // JOIN ROOM
-  // ===============================
   socket.on("join_room", ({ roomId, username }) => {
-    // Create room if not exists
     if (!rooms[roomId]) {
       rooms[roomId] = {
         videoId: "dQw4w9WgXcQ",
@@ -41,20 +36,17 @@ io.on("connection", (socket) => {
     room.users[socket.id] = { username, role };
     socket.join(roomId);
 
-    // Send sync state only to new user
     socket.emit("sync_state", {
       videoId: room.videoId,
       currentTime: room.currentTime,
       isPlaying: room.isPlaying,
     });
 
-    // Broadcast room update
     io.to(roomId).emit("room_update", room);
   });
 
-  // ===============================
+
   // PLAY
-  // ===============================
   socket.on("play", ({ roomId, currentTime }) => {
     const room = rooms[roomId];
     if (!room) return;
@@ -66,9 +58,8 @@ io.on("connection", (socket) => {
     io.to(roomId).emit("play");
   });
 
-  // ===============================
+  
   // PAUSE
-  // ===============================
   socket.on("pause", ({ roomId, currentTime }) => {
     const room = rooms[roomId];
     if (!room) return;
@@ -80,9 +71,7 @@ io.on("connection", (socket) => {
     io.to(roomId).emit("pause");
   });
 
-  // ===============================
   // SEEK
-  // ===============================
   socket.on("seek", ({ roomId, time }) => {
     const room = rooms[roomId];
     if (!room) return;
@@ -92,9 +81,9 @@ io.on("connection", (socket) => {
     io.to(roomId).emit("seek", { time });
   });
 
-  // ===============================
+  
   // CHANGE VIDEO
-  // ===============================
+  
   socket.on("change_video", ({ roomId, videoId }) => {
     const room = rooms[roomId];
     if (!room) return;
@@ -107,22 +96,22 @@ io.on("connection", (socket) => {
     io.to(roomId).emit("change_video", { videoId });
   });
 
-  // ===============================
+  
   // REMOVE USER
-  // ===============================
+  
   socket.on("remove_user", ({ roomId, userId }) => {
     const room = rooms[roomId];
     if (!room) return;
     if (socket.id !== room.hostId) return;
 
     delete room.users[userId];
-    io.to(userId).emit("removed_by_host"); // Popup for removed participant
+    io.to(userId).emit("removed_by_host");
     io.to(roomId).emit("room_update", room);
   });
 
-  // ===============================
+  
   // MAKE HOST / ASSIGN MODERATOR
-  // ===============================
+  
   socket.on("make_host", ({ roomId, userId }) => {
     const room = rooms[roomId];
     if (!room) return;
@@ -135,7 +124,7 @@ io.on("connection", (socket) => {
     io.to(roomId).emit("room_update", room);
   });
 
-  socket.on("assign_moderator", ({ roomId, userId }) => {
+  socket.on("make_moderator", ({ roomId, userId }) => {
     const room = rooms[roomId];
     if (!room) return;
     if (socket.id !== room.hostId) return;
@@ -144,16 +133,16 @@ io.on("connection", (socket) => {
     io.to(roomId).emit("room_update", room);
   });
 
-  // ===============================
+  
   // CHAT
-  // ===============================
+  
   socket.on("chat_message", ({ roomId, username, message }) => {
     io.to(roomId).emit("chat_message", { username, message });
   });
 
-  // ===============================
+  
   // DISCONNECT
-  // ===============================
+  
   socket.on("disconnect", () => {
     console.log("Client disconnected:", socket.id);
 
@@ -162,17 +151,21 @@ io.on("connection", (socket) => {
       if (room.users[socket.id]) {
         delete room.users[socket.id];
 
+        const remainingUsers = Object.keys(room.users);
+        
+        // BONUS FIX: Delete the room if it's empty to prevent memory leaks over time
+        if (remainingUsers.length === 0) {
+          delete rooms[roomId];
+          continue;
+        }
+
         // If host leaves → assign new host
         if (room.hostId === socket.id) {
-          const remainingUsers = Object.keys(room.users);
-          if (remainingUsers.length > 0) {
-            const newHostId = remainingUsers[0];
-            room.hostId = newHostId;
-
-            for (let id in room.users) {
-              room.users[id].role = id === newHostId ? "HOST" : "PARTICIPANT";
-            }
-          }
+          const newHostId = remainingUsers[0];
+          room.hostId = newHostId;
+          
+          // BUG FIX 3: Give the new host their role WITHOUT wiping existing moderators
+          room.users[newHostId].role = "HOST";
         }
 
         io.to(roomId).emit("room_update", room);
@@ -181,8 +174,7 @@ io.on("connection", (socket) => {
   });
 });
 
-// ===============================
+
 // START SERVER
-// ===============================
 const PORT = process.env.PORT || 5001;
 server.listen(PORT, () => console.log(`Server running on port ${PORT}`));
