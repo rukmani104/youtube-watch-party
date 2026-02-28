@@ -75,8 +75,11 @@ node server.js
 # Folder Structure
 server/
 ├── server.js           # Main server + WebSocket logic
+
 ├── package.json        # Dependencies and scripts
+
 ├── package-lock.json
+
 └── README.md
 
 # Deployment on Render
