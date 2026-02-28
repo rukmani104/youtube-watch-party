@@ -96,9 +96,6 @@ node server.js
 
 Environment variables: Not required for MVP
 
-Access your WebSocket backend via the Render URL, e.g.,
-https://your-backend.onrender.com
-
 
 # Notes
 
